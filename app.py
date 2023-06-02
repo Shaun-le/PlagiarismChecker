@@ -1,9 +1,17 @@
 import os
 import time
+
+import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
+
+from PlagiarismChecker import checker
 from extract import extract_docx
+from PlagiarismDetection import find_candiate
+import re
+
+from similarity import cosine_similarity
 
 st.set_page_config(page_icon="📖", layout="wide")
 
@@ -59,12 +67,41 @@ if file is not None:
 
     st.write('Successful!')
 
-    col1, col2 = st.columns(2)
-    with col1:
-        a = extract_docx(file_path)
-        os.remove(file_path)
-        text_to_display = '\n'.join(a)
-        st.text_area('Context: ', value=text_to_display)
+    #col1, col2 = st.columns(2)
+    #with col1:
+    ext = extract_docx(file_path)
+    os.remove(file_path)
+    text_to_display = '\n'.join(ext)
+    area1 = st.empty()  # Khởi tạo một widget trống
+    area1.text_area('Content: ', value=text_to_display)  # Tạo một widget text_area với nội dung mặc định
+    #with col2:
+    cont = '. '.join(ext)
+    candidate = find_candiate(cont)
+    sorted_candidate = {'filename': [], 'prediction': [], 'score': []}
+    for i in range(len(candidate)):
+        score = cosine_similarity(cont, candidate['prediction'][i])
+        if score > 0.1:
+            sorted_candidate['filename'].append(candidate['filename'][i])
+            sorted_candidate['prediction'].append(candidate['prediction'][i])
+            sorted_candidate['score'].append(score)
+
+    sorted_candidate_df = pd.DataFrame(sorted_candidate)
+    cdfs = sorted_candidate_df.sort_values(by="score", ascending=False).reset_index(drop=True)
+    for i in range(len(cdfs)):
+        file_name = cdfs['filename'][i]
+        button_text = f"{cdfs['score'][i] * 100: .0f}% - {file_name}"
+        cand_display = '\n'.join(eval(cdfs['prediction'][i]))
+        if st.button(button_text):
+            s1, s2 = checker(cont, '. '.join(eval(cdfs['prediction'][0])))
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(s1, unsafe_allow_html=True)
+            with col2:
+                st.markdown(s2, unsafe_allow_html=True)
 
 else:
     st.write('Please upload the data to check for plagiarism (docx).')
+
+
+
+

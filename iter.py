@@ -1,64 +1,59 @@
-import tqdm
-
-from pdf_struct import loader
-from pdf_struct.core import transition_labels, feature_extractor
-from pdf_struct.core.export import to_paragraphs
-from pdf_struct.core.predictor import train_classifiers, predict_with_classifiers
+import os
+import pandas as pd
 from pdf_struct.feature_extractor import TextContractFeatureExtractor
-
-annos = transition_labels.load_annos('datasets/anno')
+from pdf_struct import loader
+from pdf_struct.core import transition_labels
+from pdf_struct import feature_extractor
+from pdf_struct.core.export import to_tree, to_paragraphs
+from pdf_struct.core.predictor import train_classifiers, \
+    predict_with_classifiers
+from pdf_struct.export.hocr import export_result
+import tqdm
+import pickle
 
 FILE_TYPE = 'docx'
-documents = loader.modules[FILE_TYPE].load_from_directory('datasets/raw', annos)
-assert len(documents) > 0
-feature_extractor_cls = feature_extractor.feature_extractors['TextContractFeatureExtractor']
-documents = [feature_extractor_cls.append_features_to_document(document)
-                 for document in tqdm.tqdm(documents)]
 
-clf, clf_ptr = train_classifiers(documents)
+def select_model(model_path:str):
+    with open(model_path, 'rb') as file:
+        model = pickle.load(file)
+    return model
 
-'''with open('clf.pkl', 'wb') as file:
-    pickle.dump(clf, file)
-
-with open('clf_ptr.pkl', 'wb') as file:
-    pickle.dump(clf_ptr, file)'''
-
-# Now make predictions
-document = loader.modules[FILE_TYPE].load_document('datasets/raw/LeHuuLoi_10120764_124201_DoAn2.docx', None, None)
-
-document = TextContractFeatureExtractor.append_features_to_document(document)
-
-pred = predict_with_classifiers(clf, clf_ptr, [document])[0]
-
-
-'''# đường dẫn tới thư mục chứa các file dữ liệu
-data_dir = 'datasets/raw'
-
-# khởi tạo danh sách kết quả
-results = []
-
-# duyệt qua tất cả các file trong thư mục
-for filename in os.listdir(data_dir):
-    # lấy đường dẫn đầy đủ đến tệp
-    file_path = os.path.join(data_dir, filename)
-
-    # nếu tệp là tệp văn bản
-    if filename.endswith('.docx') or filename.endswith('.txt'):
-        # load tài liệu và trích xuất đặc trưng
+def process_file(file_path):
+    try:
         document = loader.modules[FILE_TYPE].load_document(file_path, None, None)
         document = TextContractFeatureExtractor.append_features_to_document(document)
-
-        # dự đoán lớp của tài liệu
         pred = predict_with_classifiers(clf, clf_ptr, [document])[0]
+        return (file_path, to_paragraphs(pred))
+    except Exception as e:
+        print(f"Error processing file {file_path}: {str(e)}")
+        return None
 
-        # thêm kết quả vào danh sách
-        results.append((filename, to_paragraphs(pred)))
+# Load classifiers
+clf = select_model('clf.pkl')
+clf_ptr = select_model('clf_ptr.pkl')
 
-# tạo DataFrame từ danh sách kết quả
+# Đường dẫn tới thư mục chứa các file dữ liệu
+data_dir = 'data'
+
+# Khởi tạo danh sách kết quả
+results = []
+
+# Duyệt qua tất cả các file trong thư mục
+for filename in tqdm.tqdm(os.listdir(data_dir)):
+    # Lấy đường dẫn đầy đủ đến tệp
+    file_path = os.path.join(data_dir, filename)
+
+    # Nếu tệp là tệp văn bản
+    if filename.endswith('.docx') or filename.endswith('.txt'):
+        # Xử lý tệp và thêm kết quả vào danh sách
+        result = process_file(file_path)
+        if result is not None:
+            results.append(result)
+
 df = pd.DataFrame(results, columns=['filename', 'prediction'])
 
-# ghi kết quả vào tệp CSV
-df.to_csv('datasets/results.csv', index=False)'''
+# Loại bỏ phần data_dir trong phần filename
+df['filename'] = df['filename'].apply(lambda x: os.path.basename(x))
 
-print(to_paragraphs(pred))
-
+# Ghi kết quả vào tệp CSV
+df.to_csv('datasets/results.csv', index=False)

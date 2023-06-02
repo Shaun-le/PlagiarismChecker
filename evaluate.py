@@ -10,6 +10,7 @@ def _evaluate(k_folds: int, prediction, metrics, file_type: str,feature : str, r
     annos = transition_labels.load_annos(anno_dir)
     print('Loading raw files')
     documents = loader.modules[file_type].load_from_directory(raw_dir, annos)
+    print(documents)
     feature_extractor_cls = feature_extractor.feature_extractors[feature]
     if len(documents) == 0:
         click.echo(
